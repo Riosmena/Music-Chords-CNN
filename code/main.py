@@ -1,26 +1,69 @@
+"""
+File: main.py
+==========================================================================
+Description:
+This file contains the implementation of a Convolutional Neural Network (CNN)
+using the Keras framework. The dataset used is a collection of audio files
+representing major and minor chords. The goal is to classify the chords as
+either "major" or "minor" based on their spectrograms.
+
+==========================================================================
+Date                    Author                   Description
+10/22/2024         J. Riosmena          First implementation
+
+==========================================================================
+Comments:
+
+==========================================================================
+To run:
+$ python main.py
+"""
+
+# Libraries needed
 import os
 import librosa
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 from sklearn.model_selection import train_test_split
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+from tensorflow.keras.utils import to_categorical
 
-# Función para convertir un archivo de audio en un espectrograma de tamaño fijo
 def audio_to_spectrogram(audio_path, n_fft=2048, hop_length=512, fixed_size=(128, 128)):
-    y, sr = librosa.load(audio_path, sr=None)  # Cargar el audio
-    spectrogram = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length)
-    log_spectrogram = librosa.power_to_db(spectrogram, ref=np.max)  # Escala logarítmica
+    """
+    This function reads an audio file and computes its mel spectrogram.
+    The mel spectrogram is then converted to decibels and resized to a fixed size.
 
-    # Asegurarse de que el espectrograma tenga tamaño fijo (128x128)
-    if log_spectrogram.shape[1] < fixed_size[1]:  # Padding si es muy pequeño
+    Parameters:
+    - audio_path (str): path to the audio file
+    - n_fft (int): length of the FFT window
+    - hop_length (int): number of samples between successive frames
+    - fixed_size (tuple): desired size of the spectrogram
+    - Returns: resized mel spectrogram (np.ndarray)
+    """
+    # Load the audio file and compute its mel spectrogram
+    y, sr = librosa.load(audio_path, sr=None)
+    spectrogram = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length)
+    log_spectrogram = librosa.power_to_db(spectrogram, ref=np.max)
+
+    # Resize the spectrogram to the fixed size
+    if log_spectrogram.shape[1] < fixed_size[1]:
         pad_width = fixed_size[1] - log_spectrogram.shape[1]
         log_spectrogram = np.pad(log_spectrogram, ((0, 0), (0, pad_width)), mode='constant')
-    return log_spectrogram[:fixed_size[0], :fixed_size[1]]  # Cortar si es muy grande
 
-# Recorrer los archivos del dataset y generar espectrogramas
+    return log_spectrogram[:fixed_size[0], :fixed_size[1]]
+
 def load_dataset(data_dir):
-    X, y = [], []
+    """
+    This function loads the dataset from the specified directory.
+    The dataset is expected to have two subdirectories: 'major' and 'minor'.
+    Each subdirectory should contain audio files corresponding to major and 
+    minor chords, respectively.
+
+    Parameters:
+    - data_dir (str): path to the dataset directory
+    - Returns: X (np.ndarray), y (np.ndarray), filenames (list)
+    """
+    X, y, filenames = [], [], []
     for label in ['major', 'minor']:
         folder = os.path.join(data_dir, label)
         for filename in os.listdir(folder):
@@ -28,44 +71,63 @@ def load_dataset(data_dir):
                 audio_path = os.path.join(folder, filename)
                 spectrogram = audio_to_spectrogram(audio_path)
                 X.append(spectrogram)
-                y.append(0 if label == 'major' else 1)  # 0 = Mayor, 1 = Menor
-    return np.array(X), np.array(y)
+                y.append(0 if label == 'major' else 1)
+                filenames.append(filename)
 
-# Cargar el dataset
+    return np.array(X), np.array(y), filenames
+
+# Load the dataset
 data_dir = 'data'
-X, y = load_dataset(data_dir)
+X, y, filenames = load_dataset(data_dir)
 
-X_resized = np.array([librosa.util.fix_length(x, size=128, axis=1)[:128, :] for x in X])
+# Split the dataset into training, validation, and test sets
+X_train, X_temp, y_train, y_temp, filenames_train, filenames_temp = train_test_split(
+    X, y, filenames, test_size=0.2, random_state=42
+)
+X_val, X_test, y_val, y_test, filenames_val, filenames_test = train_test_split(
+    X_temp, y_temp, filenames_temp, test_size=0.5, random_state=42
+)
 
-# Dividir en conjuntos de entrenamiento y validación
-X_train, X_val, y_train, y_val = train_test_split(X_resized, y, test_size=0.2, random_state=42)
+# Reshape the input data
+X_train = X_train[..., np.newaxis]
+X_val = X_val[..., np.newaxis]
+X_test = X_test[..., np.newaxis]
 
-# Crear el modelo CNN
+# Convert the target labels to categorical
+y_train = to_categorical(y_train, num_classes=2)
+y_val = to_categorical(y_val, num_classes=2)
+y_test = to_categorical(y_test, num_classes=2)
+
+# Build the CNN model
 model = Sequential([
     Conv2D(32, (3, 3), activation='relu', input_shape=(128, 128, 1)),
     MaxPooling2D((2, 2)),
     Conv2D(64, (3, 3), activation='relu'),
     MaxPooling2D((2, 2)),
     Flatten(),
-    Dense(128, activation='relu'),
-    Dropout(0.5),
-    Dense(1, activation='sigmoid')  # Salida binaria: 0 (Mayor), 1 (Menor)
+    Dense(64, activation='relu'),
+    Dense(2, activation='softmax')  # Outputs:  "major" or "minor"
 ])
 
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+# Compile the model
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-# Entrenar el modelo
-model.fit(X_train[..., np.newaxis], y_train, epochs=10, validation_data=(X_val[..., np.newaxis], y_val))
+# Train the model
+model.fit(X_train, y_train, epochs=30, validation_data=(X_val, y_val))
 
-# Evaluar el modelo
-loss, accuracy = model.evaluate(X_val[..., np.newaxis], y_val)
-print(f'Precisión en validación: {accuracy:.2f}')
+# Evaluate the model on the test set
+loss, accuracy = model.evaluate(X_test, y_test)
+print(f'Accuracy: {accuracy:.2f}')
 
-# Realizar predicciones
-predictions = model.predict(X_val[..., np.newaxis])
+# Make predictions on the test set
+predictions = model.predict(X_test)
+binary_predictions = np.argmax(predictions, axis=1)  # Convert to binary predictions (0 or 1)
 
-# Convertir las probabilidades a etiquetas con un umbral de 0.5
-predictions = (predictions >= 0.5).astype(int)
+# Map the binary predictions to chord labels
+label_mapping = {0: "major", 1: "minor"}
+predicted_labels = [label_mapping[int(pred)] for pred in binary_predictions]
 
-print(predictions[:10])  # Mostrará ['major', 'major', 'major', 'minor', 'minor']
-
+# Print the first five predictions with the corresponding filenames
+print("\nPredictions:")
+for filename, label in zip(filenames_test[:5], predicted_labels[:5]):
+    print(f'Chord: {filename} - Prediction: {label}')
