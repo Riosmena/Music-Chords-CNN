@@ -12,7 +12,6 @@ This project is a CNN to identify if a given chord is major or minor
 
 ## Contents
 
-- [Dataset](data/imports-85.csv) -> data/imports-85.data
-- [Implementation without framework](No-Framework/main.py) -> No-Framework/main.py
-- [Implementation with framework](Framework/main_framework.py) -> Framework/main_framework.py
-- [Report](docs/M2-Report.pdf) -> docs/M2-Report.pdf
+- [Dataset](data) -> data
+- [Implementation](code/main.py) -> code/main.py
+- [Report](docs) -> docs/M2-Report.pdf
