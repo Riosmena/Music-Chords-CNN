@@ -24,10 +24,13 @@ $ python main.py
 import os
 import librosa
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization
 from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.models import load_model
 
 def audio_to_spectrogram(audio_path, n_fft=2048, hop_length=512, fixed_size=(128, 128)):
     """
@@ -102,33 +105,84 @@ y_test = to_categorical(y_test, num_classes=2)
 # Build the CNN model
 model = Sequential([
     Conv2D(32, (3, 3), activation='relu', input_shape=(128, 128, 1)),
+    BatchNormalization(),
     MaxPooling2D((2, 2)),
+    Dropout(0.3),
+
     Conv2D(64, (3, 3), activation='relu'),
+    BatchNormalization(),
     MaxPooling2D((2, 2)),
+    Dropout(0.3),
+
+    Conv2D(128, (3, 3), activation='relu'),
+    BatchNormalization(),
+    MaxPooling2D((2, 2)),
+    Dropout(0.4),
+
     Flatten(),
-    Dense(64, activation='relu'),
-    Dense(2, activation='softmax')  # Outputs:  "major" or "minor"
+    Dense(128, activation='relu'),
+    BatchNormalization(),
+    Dropout(0.5),
+
+    Dense(2, activation='softmax')
 ])
 
 # Compile the model
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
+# Create a callback to save the best model during training
+checkpoint_callback = ModelCheckpoint(
+    'models/best_model.keras',
+    monitor='val_accuracy',
+    mode='max',
+    save_best_only=True,
+    verbose=1
+)
+
 # Train the model
-model.fit(X_train, y_train, epochs=30, validation_data=(X_val, y_val))
+history = model.fit(X_train, y_train, epochs=30, validation_data=(X_val, y_val), callbacks=[checkpoint_callback])
+
+# Load the best model
+best_model = load_model('models/best_model.keras')
 
 # Evaluate the model on the test set
-loss, accuracy = model.evaluate(X_test, y_test)
-print(f'Accuracy: {accuracy:.2f}')
+print("\nEvaluating the model on the test set...")
+loss, accuracy = best_model.evaluate(X_test, y_test)
 
 # Make predictions on the test set
-predictions = model.predict(X_test)
+predictions = best_model.predict(X_test)
 binary_predictions = np.argmax(predictions, axis=1)  # Convert to binary predictions (0 or 1)
 
 # Map the binary predictions to chord labels
 label_mapping = {0: "major", 1: "minor"}
 predicted_labels = [label_mapping[int(pred)] for pred in binary_predictions]
 
+# Print the accuracy on testing set
+print(f'Test Accuracy: {accuracy * 100:.2f}%')
+
 # Print the first five predictions with the corresponding filenames
 print("\nPredictions:")
-for filename, label in zip(filenames_test[:5], predicted_labels[:5]):
+for filename, label in zip(filenames_test[:10], predicted_labels[:10]):
     print(f'Chord: {filename} - Prediction: {label}')
+
+# Plotting the training and validation accuracy
+plt.figure(figsize=(12, 6))
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Training and Validation Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.grid()
+plt.show()
+
+# Plotting the training and validation loss
+plt.figure(figsize=(12, 6))
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Training and Validation Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.grid()
+plt.show()
