@@ -26,11 +26,32 @@ import librosa
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import AdamW
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras.models import load_model
+
+
+best_model_path = 'models/best_model.keras'
+
+def compare_models(new_model, old_model, x_val, y_val):
+    if os.path.exists(old_model):
+        best_model = load_model(old_model)
+        _, current_model_accuracy = new_model.evaluate(x_val, y_val, verbose=0)
+        _, best_model_accuracy = best_model.evaluate(x_val, y_val, verbose=0)
+
+        if current_model_accuracy > best_model_accuracy:
+            print(f'\nNew model has higher accuracy ({current_model_accuracy * 100:.2f}%). Saving new model to {old_model}')
+            new_model.save(old_model)
+
+        else:
+            print(f'\nOld model has higher accuracy ({best_model_accuracy * 100:.2f}%). Keeping old model')
+    else:
+        print(f'\nNo model found. Saving new model to {old_model}')
+        new_model.save(old_model)
 
 def audio_to_spectrogram(audio_path, n_fft=2048, hop_length=512, fixed_size=(128, 128)):
     """
@@ -127,12 +148,15 @@ model = Sequential([
     Dense(2, activation='softmax')
 ])
 
+# Create an optimizer
+optimizer = AdamW(learning_rate=0.001, weight_decay=1e-5)
+
 # Compile the model
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
 
 # Create a callback to save the best model during training
 checkpoint_callback = ModelCheckpoint(
-    'models/best_model.keras',
+    'models/temp_best_model.keras',
     monitor='val_accuracy',
     mode='max',
     save_best_only=True,
@@ -143,10 +167,12 @@ checkpoint_callback = ModelCheckpoint(
 lr_reduction = ReduceLROnPlateau(monitor='val_loss', patience=3, factor=0.5, min_lr=1e-6)
 
 # Train the model
-history = model.fit(X_train, y_train, epochs=30, batch_size=32, validation_data=(X_val, y_val), callbacks=[checkpoint_callback, lr_reduction])
+history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_data=(X_val, y_val), callbacks=[checkpoint_callback, lr_reduction])
 
 # Load the best model
-best_model = load_model('models/best_model.keras')
+temp_model = load_model('models/temp_best_model.keras')
+compare_models(temp_model, best_model_path, X_val, y_val)
+best_model = load_model(best_model_path)
 
 # Evaluate the model on the test set
 print("\nEvaluating the model on the test set...")
