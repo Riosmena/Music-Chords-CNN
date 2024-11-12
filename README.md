@@ -14,4 +14,5 @@ This project is a CNN to identify if a given chord is major or minor
 
 - [Dataset](data) -> data
 - [Implementation](code/main.py) -> code/main.py
-- [Report](docs) -> docs/M2-Report.pdf
+- [Predictions](code/predictions.py) -> code/predictions.py
+- [Report](docs/M2-Report.pdf) -> docs/M2-Report.pdf
