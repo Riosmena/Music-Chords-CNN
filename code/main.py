@@ -10,6 +10,8 @@ either "major" or "minor" based on their spectrograms.
 ==========================================================================
 Date                    Author                   Description
 10/22/2024         J. Riosmena          First implementation
+11/18/2024          J. Riosmena         Updated implementation for better
+                                                              performance
 
 ==========================================================================
 Comments:
@@ -34,6 +36,12 @@ from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras.models import load_model
 
+physical_devices = tf.config.list_physical_devices('GPU')
+if len(physical_devices) > 0:
+    print(f"GPU: {physical_devices[0]}")
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+else:
+    print("No GPU found")
 
 best_model_path = 'models/best_model.keras'
 
@@ -148,8 +156,14 @@ model = Sequential([
     Dense(2, activation='softmax')
 ])
 
+lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+    initial_learning_rate=0.001,
+    decay_steps=10000,
+    decay_rate=0.9
+)
+
 # Create an optimizer
-optimizer = AdamW(learning_rate=0.001, weight_decay=1e-5)
+optimizer = AdamW(learning_rate=lr_schedule)
 
 # Compile the model
 model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
@@ -163,11 +177,11 @@ checkpoint_callback = ModelCheckpoint(
     verbose=1
 )
 
-# Create a callback to reduce the learning rate when the validation loss plateaus
-lr_reduction = ReduceLROnPlateau(monitor='val_loss', patience=3, factor=0.5, min_lr=1e-6)
+# # Create a callback to reduce the learning rate when the validation loss plateaus
+# lr_reduction = ReduceLROnPlateau(monitor='val_loss', patience=3, factor=0.5, min_lr=1e-6)
 
 # Train the model
-history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_data=(X_val, y_val), callbacks=[checkpoint_callback, lr_reduction])
+history = model.fit(X_train, y_train, epochs=60, batch_size=32, validation_data=(X_val, y_val), callbacks=[checkpoint_callback])
 
 # Load the best model
 temp_model = load_model('models/temp_best_model.keras')
