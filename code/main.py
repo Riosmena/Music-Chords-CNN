@@ -36,6 +36,7 @@ from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras.models import load_model
 
+# Check if a GPU is available
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
     print(f"GPU: {physical_devices[0]}")
@@ -43,20 +44,39 @@ if len(physical_devices) > 0:
 else:
     print("No GPU found")
 
+# Define the path to save the best model
 best_model_path = 'models/best_model.keras'
 
 def compare_models(new_model, old_model, x_val, y_val):
+    """
+    This function compares a new model with an old model based on their
+    accuracy on a validation set. If the new model has a higher accuracy,
+    it saves the new model to the specified path. Otherwise, it keeps the
+    old model.
+
+    Parameters:
+    - new_model (tf.keras.Model): new model to compare
+    - old_model (str): path to the old model
+    - x_val (np.ndarray): validation set features
+    - y_val (np.ndarray): validation set labels
+    """
+
+    # Check if the old model exists and compare the accuracies
     if os.path.exists(old_model):
         best_model = load_model(old_model)
         _, current_model_accuracy = new_model.evaluate(x_val, y_val, verbose=0)
         _, best_model_accuracy = best_model.evaluate(x_val, y_val, verbose=0)
 
+        # Save the new model if it has higher accuracy
         if current_model_accuracy > best_model_accuracy:
             print(f'\nNew model has higher accuracy ({current_model_accuracy * 100:.2f}%). Saving new model to {old_model}')
             new_model.save(old_model)
 
+        # Keep the old model if it has higher accuracy
         else:
             print(f'\nOld model has higher accuracy ({best_model_accuracy * 100:.2f}%). Keeping old model')
+    
+    # Save the new model if no old model is found
     else:
         print(f'\nNo model found. Saving new model to {old_model}')
         new_model.save(old_model)
@@ -156,6 +176,7 @@ model = Sequential([
     Dense(2, activation='softmax')
 ])
 
+# Define a learning rate schedule
 lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
     initial_learning_rate=0.001,
     decay_steps=10000,
